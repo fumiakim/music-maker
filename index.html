@@ -6,7 +6,7 @@
 <title>かんたん音楽メーカー — MUSIC MAKER</title>
 <script>
 /* 起動モードの判定（画面のちらつきを防ぐため、CSSより先に決めてしまう）
-   ?mode=adult / ?adult で強制、なければ前回のモード、それも無ければ「こども」 */
+   ?mode=adult / ?adult で強制、なければ前回のモード、それも無ければ「シンプル」 */
 (function () {
   try {
     var p = new URLSearchParams(location.search);
@@ -132,8 +132,8 @@ kbd{background:#2a3145; border:1px solid #3c465e; border-bottom-width:2px; borde
   transition:.22s; z-index:95; box-shadow:0 10px 30px rgba(0,0,0,.4);
 }
 
-/* ---------- こどもモード ---------- */
-/* boot-kids は「起動時にこどもモードで開く」ときのちらつき防止（head のスクリプトが付ける） */
+/* ---------- シンプルモード（クラス名の kids は内部名） ---------- */
+/* boot-kids は「起動時にシンプルモードで開く」ときのちらつき防止（head のスクリプトが付ける） */
 body.kids-on > header, body.kids-on > section,
 body.kids-on > main, body.kids-on > footer,
 html.boot-kids > body > header, html.boot-kids > body > section,
