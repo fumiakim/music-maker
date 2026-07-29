@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>かんたん音楽メーカー — MUSIC MAKER</title>
+<script>
+/* 起動モードの判定（画面のちらつきを防ぐため、CSSより先に決めてしまう）
+   ?mode=adult / ?adult で強制、なければ前回のモード、それも無ければ「こども」 */
+(function () {
+  try {
+    var p = new URLSearchParams(location.search);
+    var m = p.get('mode') || (p.has('adult') ? 'adult' : p.has('kids') ? 'kids' : null)
+          || localStorage.getItem('musicMaker.mode') || 'kids';
+    if (m !== 'adult') document.documentElement.classList.add('boot-kids');
+  } catch (e) {}
+})();
+</script>
+<style>
+:root{
+  --bg:#0e1018; --bg2:#161a26; --panel:#1c2130; --line:#2b3242;
+  --fg:#e9edf6; --dim:#94a0b8;
+  --lead:#ff6ea9; --chord:#4dd6c1; --bass:#a98bff; --drum:#ffb154;
+  --accent:#ffe066; --ok:#5ee08a;
+  --r:10px;
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+html,body{margin:0; height:100%}
+body{
+  background:radial-gradient(1200px 700px at 20% -10%, #1d2438 0%, var(--bg) 60%) fixed;
+  color:var(--fg); font-family:system-ui,-apple-system,"Hiragino Sans","Yu Gothic UI",sans-serif;
+  font-size:14px; overflow-y:scroll;
+}
+button,select,input{font-family:inherit; color:inherit}
+button{cursor:pointer}
+
+/* ---------- 共通パーツ ---------- */
+.btn{
+  background:var(--panel); border:1px solid var(--line); color:var(--fg);
+  border-radius:var(--r); padding:8px 12px; font-size:13px; font-weight:600;
+  transition:.12s; white-space:nowrap;
+}
+.btn:hover{background:#28304a; border-color:#3d4763}
+.btn:active{transform:translateY(1px)}
+.btn.on{background:linear-gradient(180deg,#3a4a76,#2a3350); border-color:#5a6a9c}
+.btn.primary{background:linear-gradient(180deg,#ff8bb8,#e8447f); border-color:#ff9dc4; color:#2a0d19}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.sel{background:linear-gradient(180deg,#4a5a86,#31406b); border-color:#7b8cc4; color:#fff}
+.btn.mini{padding:5px 9px; font-size:12px; font-weight:600}
+select{
+  background:var(--panel); border:1px solid var(--line); border-radius:8px;
+  padding:7px 8px; font-size:13px;
+}
+input[type=range]{ -webkit-appearance:none; appearance:none; height:6px; border-radius:99px;
+  background:#333c54; outline:none; width:100%; }
+input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:16px; height:16px;
+  border-radius:50%; background:#fff; border:2px solid #7f8db3; cursor:pointer }
+.ctl{display:flex; flex-direction:column; gap:3px; min-width:110px}
+.ctl label{font-size:11px; color:var(--dim); font-weight:600; letter-spacing:.02em}
+.sep{width:1px; align-self:stretch; background:var(--line); margin:0 2px}
+
+/* ---------- ヘッダー ---------- */
+header{
+  position:sticky; top:0; z-index:20;
+  background:rgba(14,16,24,.92); backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line);
+  padding:8px 12px; display:flex; flex-wrap:wrap; gap:10px; align-items:center;
+}
+.brand{display:flex; align-items:center; gap:8px; margin-right:4px}
+.logo{
+  width:34px; height:34px; border-radius:10px; display:grid; place-items:center; font-size:19px;
+  background:linear-gradient(135deg,var(--lead),var(--bass)); color:#12131a;
+}
+.brand b{display:block; font-size:15px; line-height:1.15}
+.brand small{color:var(--dim); font-size:10px; letter-spacing:.14em}
+#btnPlay{
+  width:58px; height:44px; border-radius:12px; font-size:19px;
+  background:linear-gradient(180deg,#5ee08a,#2fae5d); border:1px solid #7ff0a6; color:#062513;
+}
+#btnPlay.playing{background:linear-gradient(180deg,#ff8f6e,#e0512b); border-color:#ffae95; color:#2a0c04}
+.bar{
+  display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+  padding:8px 12px; border-bottom:1px solid var(--line); background:rgba(22,26,38,.6);
+}
+.bar .ttl{font-size:11px; color:var(--dim); font-weight:700; letter-spacing:.06em; margin-right:2px}
+
+/* ---------- パターン／コード ---------- */
+.pat{width:40px; height:34px; font-size:15px; font-weight:800}
+.chip{
+  min-width:30px; height:28px; border-radius:8px; background:#232a3d; border:1px solid var(--line);
+  font-weight:800; font-size:13px;
+}
+.chip.now{background:var(--lead); color:#2a0d19; border-color:#ffa8c9}
+.chordbtn{min-width:56px; height:34px; font-weight:700}
+.chordbtn small{display:block; font-size:9px; color:var(--dim); font-weight:600}
+.chordbtn.sel small{color:#dfe7ff}
+
+/* ---------- レーン ---------- */
+main{padding:10px 12px 40px; display:flex; flex-direction:column; gap:9px}
+.lane{background:var(--bg2); border:1px solid var(--line); border-radius:14px; overflow:hidden}
+.lane-head{
+  display:flex; align-items:center; gap:8px; padding:4px 10px;
+  background:rgba(255,255,255,.03); border-bottom:1px solid var(--line);
+}
+.lane-name{font-weight:800; font-size:13px; display:flex; align-items:center; gap:6px; min-width:98px}
+.dot{width:10px; height:10px; border-radius:3px}
+.lane-head .spacer{flex:1; order:9}
+.lane-head .vol{width:96px; order:8; margin-left:6px}
+.lane-body{overflow-x:auto; overflow-y:hidden}
+canvas{display:block; touch-action:none}
+
+/* ---------- モーダル・トースト ---------- */
+.modal{
+  position:fixed; inset:0; z-index:60; display:none; place-items:center;
+  background:rgba(6,8,14,.72); backdrop-filter:blur(4px); padding:16px;
+}
+.modal.show{display:grid}
+.sheet{
+  background:var(--bg2); border:1px solid var(--line); border-radius:18px;
+  max-width:660px; width:100%; max-height:84vh; overflow:auto; padding:22px 24px;
+  box-shadow:0 24px 60px rgba(0,0,0,.5);
+}
+.sheet h2{margin:0 0 4px; font-size:20px}
+.sheet h3{margin:20px 0 6px; font-size:14px; color:var(--lead)}
+.sheet p,.sheet li{line-height:1.75; color:#d5dcec; font-size:13.5px}
+.sheet ol,.sheet ul{padding-left:1.3em; margin:6px 0}
+kbd{background:#2a3145; border:1px solid #3c465e; border-bottom-width:2px; border-radius:5px; padding:1px 6px; font-size:12px}
+#toast{
+  position:fixed; left:50%; bottom:26px; transform:translate(-50%,20px);
+  background:#232b40; color:#e9edf6; border:1px solid var(--line); border-radius:12px;
+  padding:11px 18px; font-weight:700; font-size:13px; opacity:0; pointer-events:none;
+  transition:.22s; z-index:95; box-shadow:0 10px 30px rgba(0,0,0,.4);
+}
+
+/* ---------- こどもモード ---------- */
+/* boot-kids は「起動時にこどもモードで開く」ときのちらつき防止（head のスクリプトが付ける） */
+body.kids-on > header, body.kids-on > section,
+body.kids-on > main, body.kids-on > footer,
+html.boot-kids > body > header, html.boot-kids > body > section,
+html.boot-kids > body > main, html.boot-kids > body > footer{display:none}
+.kids{
+  position:fixed; inset:0; z-index:80; display:none; flex-direction:column;
+  align-items:center; gap:10px; padding:12px 10px 18px; overflow:auto;
+  background:linear-gradient(180deg,#fff9ec 0%,#ffeef3 55%,#eef6ff 100%); color:#4a3628;
+}
+.kids.show{display:flex}
+.kids-top{display:flex; align-items:center; gap:12px; width:100%; max-width:940px}
+.kids-title{flex:1; text-align:center; font-weight:800; font-size:16px; color:#a4826a}
+.kids-mid{display:flex; flex-direction:column; gap:10px; align-items:center}
+.kcard{background:rgba(255,255,255,.7); border-radius:20px; padding:8px;
+  box-shadow:0 8px 22px rgba(170,130,100,.16)}
+.kids canvas{display:block; touch-action:none; margin:0 auto}
+.kids-bottom{display:flex; flex-wrap:wrap; gap:8px; justify-content:center; align-items:center}
+.kgroup{display:flex; gap:6px; background:rgba(255,255,255,.65); padding:5px; border-radius:20px}
+.kbtn{
+  border:none; border-radius:16px; padding:10px 16px; font-size:17px; font-weight:800;
+  background:#fff; color:#4a3628; box-shadow:0 4px 0 #e7d5c0; cursor:pointer; transition:.08s;
+}
+.kbtn:active{transform:translateY(3px); box-shadow:0 1px 0 #e7d5c0}
+.kbtn.sel{background:#ffe6a3; box-shadow:0 4px 0 #e0b95c}
+.kbtn.small{font-size:13px; padding:9px 13px}
+.kbtn:disabled{opacity:.6}
+.kplay{width:92px; height:60px; font-size:26px; background:#63d98a; color:#0b3b1f; box-shadow:0 5px 0 #34a95e}
+.kplay.on{background:#ff9270; color:#4a1405; box-shadow:0 5px 0 #d9502a}
+#toast.show{opacity:1; transform:translate(-50%,0)}
+footer{padding:0 14px 30px; color:var(--dim); font-size:12px; line-height:1.9}
+
+@media (max-width:640px){
+  .brand small{display:none}
+  .ctl{min-width:92px}
+  header{gap:8px; padding:8px}
+  .bar{padding:7px 8px}
+  main{padding:8px 8px 30px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="logo">♪</div>
+    <div><b>かんたん音楽メーカー</b><small>MUSIC MAKER</small></div>
+  </div>
+
+  <button id="btnPlay" title="スペースキーでも再生／停止">▶</button>
+
+  <div class="ctl" style="max-width:150px">
+    <label>テンポ <output id="bpmOut">108</output> BPM</label>
+    <input id="bpm" type="range" min="60" max="200" step="1" value="108">
+  </div>
+  <div class="ctl" style="max-width:130px">
+    <label>ノリ（はねる）<output id="swingOut">0</output>%</label>
+    <input id="swing" type="range" min="0" max="60" step="1" value="0">
+  </div>
+  <div class="ctl" style="max-width:130px">
+    <label>ぜんたいの音量</label>
+    <input id="master" type="range" min="0" max="100" step="1" value="85">
+  </div>
+
+  <div class="sep"></div>
+
+  <div class="ctl" style="min-width:150px">
+    <label>おまかせ作曲</label>
+    <div style="display:flex; gap:6px">
+      <select id="genre" style="flex:1"></select>
+      <button id="btnAuto" class="btn primary">🎲 作る</button>
+    </div>
+  </div>
+
+  <div class="spacer" style="flex:1"></div>
+  <button id="btnKids" class="btn" style="background:linear-gradient(180deg,#ffd66e,#f0a92c); color:#3a2a08; border-color:#ffe08f">👶 こどもモード</button>
+  <button id="btnHelp" class="btn">？ つかいかた</button>
+</header>
+
+<section class="bar">
+  <span class="ttl">キー</span>
+  <select id="key"></select>
+  <select id="scale"></select>
+  <div class="sep"></div>
+  <span class="ttl">再生</span>
+  <button id="modeSong" class="btn mini sel">ソング（A→B→C→D）</button>
+  <button id="modePat" class="btn mini">1パターンくり返し</button>
+  <button id="btnMetro" class="btn mini">🥢 メトロノーム</button>
+  <div class="sep"></div>
+  <span class="ttl">ひびき</span>
+  <div class="ctl" style="max-width:110px"><label>ひろがり</label><input id="reverb" type="range" min="0" max="100" value="28"></div>
+  <div class="ctl" style="max-width:110px"><label>やまびこ</label><input id="delay" type="range" min="0" max="100" value="14"></div>
+  <div class="sep"></div>
+  <button id="btnSave" class="btn mini">💾 保存</button>
+  <button id="btnLoad" class="btn mini">📂 読込</button>
+  <button id="btnWav" class="btn mini">🎧 WAVで書き出し</button>
+  <select id="wavLoops" class="btn mini" style="padding:5px 6px">
+    <option value="1">1回</option><option value="2" selected>2回</option><option value="4">4回</option>
+  </select>
+  <button id="btnReset" class="btn mini">🗑 全部消す</button>
+  <input id="fileIn" type="file" accept="application/json,.json" hidden>
+</section>
+
+<section class="bar">
+  <span class="ttl">パターン</span>
+  <div id="patBtns" style="display:flex; gap:5px"></div>
+  <button id="btnCopy" class="btn mini">コピー</button>
+  <button id="btnPaste" class="btn mini">はりつけ</button>
+  <button id="btnClearPat" class="btn mini">このパターンを消す</button>
+  <div class="sep"></div>
+  <span class="ttl">曲のならび</span>
+  <div id="chain" style="display:flex; gap:4px; flex-wrap:wrap"></div>
+  <button id="chainAdd" class="btn mini">＋</button>
+  <button id="chainDel" class="btn mini">−</button>
+  <label style="display:flex; align-items:center; gap:5px; font-size:12px; color:var(--dim)">
+    <input type="checkbox" id="follow" checked> 再生中のパターンを表示
+  </label>
+</section>
+
+<section class="bar">
+  <span class="ttl">コード</span>
+  <div id="chordBtns" style="display:flex; gap:5px; flex-wrap:wrap"></div>
+  <button id="btn7th" class="btn mini">7th（おしゃれ）</button>
+  <button id="btnArp" class="btn mini">アルペジオ</button>
+  <div class="sep"></div>
+  <span class="ttl">進行プリセット</span>
+  <select id="prog"></select>
+  <button id="btnProg" class="btn mini">あてはめる</button>
+</section>
+
+<main>
+  <div class="lane" data-lane="lead">
+    <div class="lane-head">
+      <div class="lane-name"><span class="dot" style="background:var(--lead)"></span>メロディ</div>
+      <select class="inst mini" data-t="lead"></select>
+      <button class="btn mini mute" data-t="lead">🔊</button>
+      <div class="spacer"></div>
+      <input class="vol" data-t="lead" type="range" min="0" max="100" value="75">
+    </div>
+    <div class="lane-body"><canvas id="cvLead"></canvas></div>
+  </div>
+
+  <div class="lane" data-lane="chord">
+    <div class="lane-head">
+      <div class="lane-name"><span class="dot" style="background:var(--chord)"></span>コード</div>
+      <select class="inst mini" data-t="chord"></select>
+      <button class="btn mini mute" data-t="chord">🔊</button>
+      <div class="spacer"></div>
+      <input class="vol" data-t="chord" type="range" min="0" max="100" value="55">
+    </div>
+    <div class="lane-body"><canvas id="cvChord"></canvas></div>
+  </div>
+
+  <div class="lane" data-lane="bass">
+    <div class="lane-head">
+      <div class="lane-name"><span class="dot" style="background:var(--bass)"></span>ベース</div>
+      <select class="inst mini" data-t="bass"></select>
+      <button class="btn mini mute" data-t="bass">🔊</button>
+      <div class="spacer"></div>
+      <input class="vol" data-t="bass" type="range" min="0" max="100" value="80">
+    </div>
+    <div class="lane-body"><canvas id="cvBass"></canvas></div>
+  </div>
+
+  <div class="lane" data-lane="drum">
+    <div class="lane-head">
+      <div class="lane-name"><span class="dot" style="background:var(--drum)"></span>ドラム</div>
+      <button class="btn mini mute" data-t="drum">🔊</button>
+      <div class="spacer"></div>
+      <input class="vol" data-t="drum" type="range" min="0" max="100" value="90">
+    </div>
+    <div class="lane-body"><canvas id="cvDrum"></canvas></div>
+  </div>
+</main>
+
+<footer>
+  マスをクリック（ドラッグでも）＝音を置く／もう一度クリック＝消す。<kbd>Shift</kbd>＋クリックで<b>アクセント</b>（強い音）。
+  <kbd>スペース</kbd>＝再生／停止、<kbd>1</kbd>〜<kbd>4</kbd>＝パターン切替、<kbd>⌘Z</kbd>＝ひとつ前にもどす。
+</footer>
+
+<div class="modal" id="help">
+  <div class="sheet">
+    <h2>つかいかた</h2>
+    <p>音楽の知識がなくても大丈夫。<b>選んだキーとスケールの音しかマスに置けない</b>ので、どこを押しても曲になります。</p>
+
+    <h3>1. まず「🎲 作る」を押す</h3>
+    <p>ジャンルを選んで <b>おまかせ作曲</b> を押すと、ドラム・ベース・コード・メロディが自動でできます。気に入るまで何度でも押してください。そこから直していくのがいちばん近道です。</p>
+
+    <h3>2. マスをぬる</h3>
+    <p>4つの段（メロディ／コード／ベース／ドラム）は、よこが時間（1小節を16こまに分けたもの）、たてが音の高さです。クリックで置く、もう一度クリックで消す、ドラッグで連続してぬれます。<b>となりどうしをつなげると長い音</b>になります。左の「ド・レ・ミ」は移動ド（そのキーでのよび方）です。</p>
+
+    <h3>3. コードを選ぶ</h3>
+    <p>コードの帯にあるボタンは、そのキーで<b>使ってよい7つのコード</b>だけが並んでいます。パターンごとに1つ選びます。迷ったら「進行プリセット」（ポップ王道・カノン進行など）を当てはめればOK。メロディ段の少し明るい行が<b>そのコードに合う音</b>です。</p>
+
+    <h3>4. 4つのパターンをつなげて曲にする</h3>
+    <p>パターンA〜Dはそれぞれ1小節。「曲のならび」で <b>A→B→C→D</b> のように並べたものが1曲になります。チップをクリックすると A/B/C/D が切り替わり、＋−で長さを変えられます。</p>
+
+    <h3>5. 書き出す</h3>
+    <p><b>🎧 WAVで書き出し</b>で音声ファイルとして保存できます（そのままSNSや動画で使えます）。<b>💾 保存</b>は作りかけのデータ（.json）です。作業内容はブラウザにも自動保存されます。</p>
+
+    <h3>👶 こどもモードについて</h3>
+    <p>右上の <b>👶 こどもモード</b> を押すと、<b>8マス×5音（ドレミソラ）とドラム3つだけ</b>の画面に切り替わります。
+    ベースとコード（ド→ソ→ラm→ファ）は自動で鳴りつづけ、かいたメロディは4小節ぶんくり返されるので、
+    どこを押しても曲になります。読める文字はひらがなだけ、ボタンは「▶ / 🎲おまかせ / 🧹けす / 🎧ほぞん / 楽器4つ / はやさ3つ」だけ。
+    こどもモードとおとなモードの曲は<b>別々に保存</b>されるので、行き来しても作りかけは消えません。</p>
+
+    <h3>こまったら</h3>
+    <ul>
+      <li>音が出ない → 画面のどこかを一度クリックしてから再生（ブラウザの制限のため）。</li>
+      <li>ごちゃごちゃしてきた → 各段の 🔊 でその段だけ消音して聴き比べる。</li>
+      <li>雰囲気を変えたい → スケールを「マイナー」や「ペンタ」に変えるだけで別の曲に聞こえます。</li>
+    </ul>
+    <p style="text-align:right; margin-top:18px"><button class="btn primary" onclick="document.getElementById('help').classList.remove('show')">とじる</button></p>
+  </div>
+</div>
+
+<div class="kids" id="kids">
+  <div class="kids-top">
+    <button id="kPlay" class="kbtn kplay" title="スペースキーでもOK">▶</button>
+    <div class="kids-title">いろの マスを おして ▶ を おしてね</div>
+    <button id="kExit" class="kbtn small">おとなモード</button>
+  </div>
+  <div class="kids-mid">
+    <div class="kcard"><canvas id="kMel"></canvas></div>
+    <div class="kcard"><canvas id="kDrum"></canvas></div>
+  </div>
+  <div class="kids-bottom">
+    <div class="kgroup" id="kInst"></div>
+    <div class="kgroup" id="kSpeed"></div>
+    <button id="kRandom" class="kbtn">🎲 おまかせ</button>
+    <button id="kClear" class="kbtn">🧹 けす</button>
+    <button id="kWav" class="kbtn">🎧 ほぞん</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="music.js"></script>
+<script src="audio.js"></script>
+<script src="app.js"></script>
+<script src="kids.js"></script>
+</body>
+</html>
